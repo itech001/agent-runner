@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub mod config;
 pub mod provider;
 pub mod tools;
+pub mod trace;
 
 #[derive(Parser, Debug)]
 #[command(name = "agent-runner", version, about = "Non-interactive batch agent runner")]

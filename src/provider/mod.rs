@@ -86,6 +86,9 @@ pub trait Provider: Send + Sync {
     ) -> Result<ProviderResponse, ProviderError>;
 }
 
+pub mod anthropic;
+pub mod openai;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
     #[error("HTTP error: {0}")]
