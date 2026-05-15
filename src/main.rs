@@ -1,9 +1,16 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+pub mod agent;
+pub mod agent_dir;
 pub mod config;
+pub mod mcp;
+pub mod output;
 pub mod permissions;
 pub mod provider;
+pub mod report;
+pub mod skills;
+pub mod summarization;
 pub mod tools;
 pub mod trace;
 

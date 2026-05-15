@@ -5,6 +5,8 @@ pub mod compact;
 pub mod done;
 pub mod execute;
 pub mod filesystem;
+pub mod skill_tool;
+pub mod subagent;
 pub mod todos;
 
 #[derive(Debug, Clone)]
