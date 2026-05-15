@@ -1,6 +1,12 @@
 use async_trait::async_trait;
 use crate::provider::ToolDefinition;
 
+pub mod compact;
+pub mod done;
+pub mod execute;
+pub mod filesystem;
+pub mod todos;
+
 #[derive(Debug, Clone)]
 pub struct ToolOutput {
     pub content: String,

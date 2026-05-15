@@ -2,6 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 pub mod config;
+pub mod permissions;
 pub mod provider;
 pub mod tools;
 pub mod trace;
