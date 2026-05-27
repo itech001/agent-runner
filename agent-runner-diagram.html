@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent-runner — System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #141418;
+    --surface-2: #1C1C22;
+    --border: #2A2A35;
+    --text: #F0F0F5;
+    --text-dim: #7A7A90;
+    --accent: #7C6AEF;
+    --accent-glow: rgba(124, 106, 239, 0.25);
+    --green: #22C55E;
+    --green-dim: rgba(34, 197, 94, 0.12);
+    --cyan: #22D3EE;
+    --cyan-dim: rgba(34, 211, 238, 0.12);
+    --orange: #FB923C;
+    --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 60px 40px;
+    min-height: 100vh;
+  }
+
+  .diagram {
+    max-width: 1400px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 80px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .header h1 {
+    font-family: var(--mono);
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    margin-bottom: 8px;
+  }
+  .header h1 .prompt { color: var(--green); }
+  .header .subtitle {
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  /* Main Grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin-bottom: 80px;
+  }
+
+  /* Section Labels */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label::before {
+    content: '';
+    width: 12px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--cyan), var(--green));
+  }
+
+  /* File Tree */
+  .file-tree {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    line-height: 2.2;
+  }
+  .file-tree .dir {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+  .file-tree .file {
+    color: var(--text-dim);
+  }
+  .file-tree .comment {
+    color: var(--text-dim);
+    opacity: 0.5;
+    font-style: italic;
+    margin-left: 12px;
+  }
+  .file-tree .indent-1 { padding-left: 24px; }
+  .file-tree .indent-2 { padding-left: 48px; }
+  .file-tree .indent-3 { padding-left: 72px; }
+
+  /* Flow Diagram */
+  .flow-container {
+    position: relative;
+    padding: 20px 0;
+  }
+  .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .flow-step:last-child { margin-bottom: 0; }
+  .flow-step::before {
+    content: '';
+    position: absolute;
+    left: 23px;
+    top: 48px;
+    width: 2px;
+    height: calc(100% - 12px);
+    background: var(--border);
+  }
+  .flow-step:last-child::before { display: none; }
+  .step-num {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .step-content {
+    flex: 1;
+  }
+  .step-content h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .step-content p {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Agent Loop */
+  .loop-section {
+    margin-top: 60px;
+    margin-bottom: 60px;
+  }
+  .loop-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .loop-diagram::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .loop-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .loop-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+  .loop-node {
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .loop-node.active {
+    border-color: var(--cyan);
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.3);
+    color: var(--cyan);
+  }
+  .loop-node.active::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.02); }
+  }
+  .loop-arrow {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    animation: flow 1.5s ease-in-out infinite;
+  }
+  @keyframes flow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; color: var(--cyan); }
+  }
+
+  /* Tools Grid */
+  .tools-section {
+    margin-bottom: 60px;
+  }
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .tool-chip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    transition: all 0.2s ease;
+  }
+  .tool-chip:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .tool-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tool-icon svg {
+    width: 16px;
+    height: 16px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tool-info {
+    flex: 1;
+  }
+  .tool-info code {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent);
+    display: block;
+  }
+  .tool-info span {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  /* Config Section */
+  .config-section {
+    margin-bottom: 60px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .config-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .config-card h4 {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .config-card h4 .type {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    font-weight: 400;
+    padding: 2px 6px;
+    background: var(--surface-2);
+    border-radius: 4px;
+  }
+  .config-card p {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .config-card code {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--cyan);
+    background: var(--cyan-dim);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+    margin-top: 80px;
+  }
+  .footer p {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  .footer .link {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .footer .link:hover { text-decoration: underline; }
+
+  /* Decorative Elements */
+  .deco-line {
+    position: absolute;
+    background: var(--border);
+  }
+  .deco-line.horizontal {
+    height: 1px;
+    width: 100%;
+  }
+  .deco-line.vertical {
+    width: 1px;
+    height: 100%;
+  }
+
+  /* Glow Effects */
+  .glow-accent {
+    box-shadow: 0 0 40px rgba(124, 106, 239, 0.15);
+  }
+  .glow-cyan {
+    box-shadow: 0 0 40px rgba(34, 211, 238, 0.15);
+  }
+  .glow-green {
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.15);
+  }
+
+  /* Animations */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .float { animation: float 4s ease-in-out infinite; }
+
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(124, 106, 239, 0.2); }
+    50% { box-shadow: 0 0 40px rgba(124, 106, 239, 0.4); }
+  }
+</style>
+</head>
+<body>
+
+<div class="diagram">
+  <!-- Header -->
+  <div class="header">
+    <h1><span class="prompt">$</span> agent-runner</h1>
+    <p class="subtitle">Minimal AI Agent Runner — System Architecture & Flow</p>
+  </div>
+
+  <!-- Main Grid: Folder Structure & Pipeline -->
+  <div class="main-grid">
+    <!-- Left: Folder Structure -->
+    <div>
+      <div class="section-label">Agent Folder Structure</div>
+      <div class="card glow-accent">
+        <div class="file-tree">
+          <div><span class="dir">my-agent/</span></div>
+          <div class="indent-1">
+            <span class="file">├── AGENTS.md</span>
+            <span class="comment"># system prompt</span>
+          </div>
+          <div class="indent-1">
+            <span class="file">├── agent-runner.json</span>
+            <span class="comment"># configuration</span>
+          </div>
+          <div class="indent-1">
+            <span class="file">├── .env</span>
+            <span class="comment"># environment vars</span>
+          </div>
+          <div class="indent-1">
+            <span class="dir">└── skills/</span>
+          </div>
+          <div class="indent-2">
+            <span class="dir">├── search/</span>
+          </div>
+          <div class="indent-3">
+            <span class="file">├── SKILL.md</span>
+            <span class="comment"># instructions</span>
+          </div>
+          <div class="indent-3">
+            <span class="dir">├── references/</span>
+            <span class="comment"># docs</span>
+          </div>
+          <div class="indent-3">
+            <span class="dir">└── scripts/</span>
+            <span class="comment"># executables</span>
+          </div>
+          <div class="indent-2">
+            <span class="dir">└── code-review/</span>
+          </div>
+          <div class="indent-3">
+            <span class="file">└── SKILL.md</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Pipeline -->
+    <div>
+      <div class="section-label">Execution Pipeline</div>
+      <div class="card glow-cyan">
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="step-num">01</div>
+            <div class="step-content">
+              <h3>Load Agent Folder</h3>
+              <p>Reads AGENTS.md, agent-runner.json, .env, and skills directory</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">02</div>
+            <div class="step-content">
+              <h3>Generate Plan</h3>
+              <p>LLM creates step-by-step execution plan. Preview with --plan-only</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">03</div>
+            <div class="step-content">
+              <h3>Agent Loop</h3>
+              <p>LLM call → tool execution → repeat until task_done or max iterations</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">04</div>
+            <div class="step-content">
+              <h3>Write Output</h3>
+              <p>run.json, report, transcript, and trace log to output directory</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Loop -->
+  <div class="loop-section">
+    <div class="section-label">Autonomous Agent Loop</div>
+    <div class="loop-diagram glow-accent">
+      <div class="loop-title">Continuous Execution Cycle</div>
+      <div class="loop-ring">
+        <div class="loop-node active">LLM Call</div>
+        <div class="loop-arrow">→</div>
+        <div class="loop-node">Tool Calls</div>
+        <div class="loop-arrow">→</div>
+        <div class="loop-node">Summarize</div>
+        <div class="loop-arrow">→</div>
+        <div class="loop-node">Check Done</div>
+        <div class="loop-arrow">→</div>
+        <div class="loop-node">Next Iteration</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tools -->
+  <div class="tools-section">
+    <div class="section-label">Built-in Tools</div>
+    <div class="tools-grid">
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>ls</code>
+          <span>List directory</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>read_file</code>
+          <span>Read with pagination</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>write_file</code>
+          <span>Write content</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>edit_file</code>
+          <span>Find & replace</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>glob</code>
+          <span>Find by pattern</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>grep</code>
+          <span>Search regex</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>execute</code>
+          <span>Run shell</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>task_done</code>
+          <span>Signal completion</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>write_todos</code>
+          <span>Track tasks</span>
+        </div>
+      </div>
+      <div class="tool-chip">
+        <div class="tool-icon">
+          <svg><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+        </div>
+        <div class="tool-info">
+          <code>compact</code>
+          <span>Shrink context</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuration -->
+  <div class="config-section">
+    <div class="section-label">Configuration</div>
+    <div class="config-grid">
+      <div class="config-card">
+        <h4>LLM_PROVIDER <span class="type">required</span></h4>
+        <p><code>anthropic</code> or <code>openai</code></p>
+      </div>
+      <div class="config-card">
+        <h4>LLM_MODEL <span class="type">required</span></h4>
+        <p>Model name e.g. <code>claude-sonnet-4-20250514</code></p>
+      </div>
+      <div class="config-card">
+        <h4>LLM_BASE_URL <span class="type">optional</span></h4>
+        <p>Override base URL for OpenAI-compatible APIs</p>
+      </div>
+      <div class="config-card">
+        <h4>ANTHROPIC_API_KEY <span class="type">if provider=anthropic</span></h4>
+        <p>Anthropic API key</p>
+      </div>
+      <div class="config-card">
+        <h4>OPENAI_API_KEY <span class="type">if provider=openai</span></h4>
+        <p>OpenAI API key</p>
+      </div>
+      <div class="config-card">
+        <h4>agent-runner.json <span class="type">config file</span></h4>
+        <p>MCP servers, timeouts, permissions, agent behavior</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>agent-runner — MIT License — <a href="https://github.com/itech001/agent-runner" class="link">github.com/itech001/agent-runner</a></p>
+    <p style="margin-top: 8px;">Owned by <a href="https://www.theaiera.cn" class="link">www.theaiera.cn</a></p>
+  </div>
+</div>
+
+<script>
+  // Animate the loop nodes
+  const nodes = document.querySelectorAll('.loop-node');
+  let current = 0;
+  
+  setInterval(() => {
+    nodes.forEach(n => n.classList.remove('active'));
+    nodes[current].classList.add('active');
+    current = (current + 1) % nodes.length;
+  }, 2000);
+
+  // Add subtle floating animation to cards
+  document.querySelectorAll('.card').forEach((card, i) => {
+    card.style.animationDelay = `${i * 0.5}s`;
+  });
+</script>
+
+</body>
+</html>
