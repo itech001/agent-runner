@@ -4,6 +4,8 @@
 
 A minimal, non-interactive AI agent runner in your server or container. Give it a folder with AGENTS.md and skills, it uses tools, MCP and skills and iterates until the task is done.
 
+![agent-runner Architecture](agent-runner-architecture.png)
+
 ## Quick Start
 
 ```sh
