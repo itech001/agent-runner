@@ -3,37 +3,26 @@ use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub llm: LlmConfig,
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
     #[serde(default)]
     pub summarization: SummarizationConfig,
     #[serde(default)]
     pub permissions: Vec<FilesystemPermission>,
-    #[serde(default)]
-    pub mcp_servers: HashMap<String, McpServerConfig>,
     #[serde(default)]
     pub subagents: Vec<SubAgentConfig>,
     #[serde(default)]
     pub agent: AgentConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct LlmConfig {
     pub provider: String,
     pub model: String,
-    pub api_key_env: String,
-    #[serde(default)]
+    pub api_key: String,
     pub base_url: Option<String>,
-    #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
-    #[serde(default = "default_temperature")]
     pub temperature: f32,
-}
-
-fn default_max_tokens() -> u32 {
-    4096
-}
-fn default_temperature() -> f32 {
-    0.7
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -150,15 +139,64 @@ fn default_execute_timeout() -> u64 {
 
 impl Config {
     pub fn load(path: &std::path::Path) -> Result<Self, ConfigError> {
+        if !path.exists() {
+            return Ok(Self::default());
+        }
         let content = std::fs::read_to_string(path).map_err(|e| ConfigError::Io(e.to_string()))?;
         let config: Config =
             serde_json::from_str(&content).map_err(|e| ConfigError::Parse(e.to_string()))?;
         Ok(config)
     }
 
-    pub fn get_api_key(&self) -> Result<String, ConfigError> {
-        std::env::var(&self.llm.api_key_env)
-            .map_err(|_| ConfigError::MissingApiKey(self.llm.api_key_env.clone()))
+    pub fn load_llm() -> Result<LlmConfig, ConfigError> {
+        let provider = std::env::var("LLM_PROVIDER")
+            .map_err(|_| ConfigError::MissingEnv("LLM_PROVIDER".into()))?;
+        let model =
+            std::env::var("LLM_MODEL").map_err(|_| ConfigError::MissingEnv("LLM_MODEL".into()))?;
+
+        let api_key = std::env::var("LLM_API_KEY")
+            .or_else(|_| match provider.as_str() {
+                "anthropic" => std::env::var("ANTHROPIC_API_KEY"),
+                "openai" => std::env::var("OPENAI_API_KEY"),
+                _ => Err(std::env::VarError::NotPresent),
+            })
+            .map_err(|_| {
+                ConfigError::MissingApiKey(format!(
+                    "LLM_API_KEY or {}_API_KEY",
+                    provider.to_uppercase()
+                ))
+            })?;
+
+        let base_url = std::env::var("LLM_BASE_URL").ok();
+        let max_tokens = std::env::var("LLM_MAX_TOKENS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(4096);
+        let temperature = std::env::var("LLM_TEMPERATURE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.7);
+
+        Ok(LlmConfig {
+            provider,
+            model,
+            api_key,
+            base_url,
+            max_tokens,
+            temperature,
+        })
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            mcp_servers: HashMap::new(),
+            summarization: SummarizationConfig::default(),
+            permissions: Vec::new(),
+            subagents: Vec::new(),
+            agent: AgentConfig::default(),
+        }
     }
 }
 
@@ -168,6 +206,8 @@ pub enum ConfigError {
     Io(String),
     #[error("Parse error: {0}")]
     Parse(String),
-    #[error("Missing API key env var: {0}")]
+    #[error("Missing environment variable: {0}")]
+    MissingEnv(String),
+    #[error("Missing API key: {0}")]
     MissingApiKey(String),
 }

@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent-runner — Minimal AI Agent Runner</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface-2: #1a1a26;
+    --border: #2a2a3a;
+    --text: #e0e0e8;
+    --text-dim: #8888a0;
+    --accent: #7c6aef;
+    --accent-glow: rgba(124, 106, 239, 0.3);
+    --green: #4ade80;
+    --orange: #fb923c;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent); color: #fff; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---- NAV ---- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 60px;
+  }
+  nav .logo {
+    font-weight: 700; font-size: 1.05rem; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  nav .logo span { color: var(--accent); }
+  nav .links { display: flex; gap: 28px; }
+  nav .links a {
+    color: var(--text-dim); font-size: 0.875rem; font-weight: 500;
+    transition: color 0.2s;
+  }
+  nav .links a:hover { color: var(--text); text-decoration: none; }
+
+  /* ---- HERO ---- */
+  #hero {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 120px 24px 80px;
+    position: relative; overflow: hidden;
+  }
+  #hero::before {
+    content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 600px;
+    background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #hero h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 800;
+    letter-spacing: -0.03em; margin-bottom: 20px; position: relative;
+  }
+  #hero h1 .accent { color: var(--accent); }
+  #hero p.tagline {
+    font-size: clamp(1rem, 2vw, 1.25rem); color: var(--text-dim);
+    max-width: 600px; margin: 0 auto 36px;
+  }
+  .badge {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--accent); margin-bottom: 20px;
+  }
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px; border-radius: 10px; font-weight: 600;
+    font-size: 0.95rem; transition: all 0.2s; cursor: pointer; border: none;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+    box-shadow: 0 0 24px var(--accent-glow);
+  }
+  .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); text-decoration: none; }
+  .btn-secondary {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); text-decoration: none; }
+
+  /* ---- SECTIONS ---- */
+  section { padding: 100px 24px; }
+  section .inner { max-width: 1100px; margin: 0 auto; }
+  .section-label {
+    font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700;
+    letter-spacing: -0.02em; margin-bottom: 16px;
+  }
+  .section-desc { color: var(--text-dim); max-width: 640px; margin-bottom: 48px; }
+
+  /* ---- FEATURES ---- */
+  .features-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .feature-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    background: var(--surface-2); display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; margin-bottom: 16px;
+  }
+  .feature-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+  .feature-card p { font-size: 0.9rem; color: var(--text-dim); }
+
+  /* ---- HOW IT WORKS ---- */
+  .flow-container {
+    display: flex; flex-direction: column; gap: 0; max-width: 640px; margin: 0 auto;
+  }
+  .flow-step {
+    display: flex; gap: 20px; align-items: flex-start; position: relative;
+  }
+  .flow-step .line-col {
+    display: flex; flex-direction: column; align-items: center; width: 40px; flex-shrink: 0;
+  }
+  .flow-step .dot {
+    width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent);
+    background: var(--bg); position: relative; z-index: 1;
+    flex-shrink: 0;
+  }
+  .flow-step .dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+  .flow-step .dot.green { border-color: var(--green); }
+  .flow-step .dot.green.active { background: var(--green); box-shadow: 0 0 12px rgba(74,222,128,0.3); }
+  .flow-step .dot.orange { border-color: var(--orange); }
+  .flow-step .dot.orange.active { background: var(--orange); box-shadow: 0 0 12px rgba(251,146,60,0.3); }
+  .flow-step .dot.cyan { border-color: var(--cyan); }
+  .flow-step .dot.cyan.active { background: var(--cyan); box-shadow: 0 0 12px rgba(34,211,238,0.3); }
+  .flow-step .stem {
+    width: 2px; flex-grow: 1; min-height: 40px;
+    background: var(--border);
+  }
+  .flow-step:last-child .stem { display: none; }
+  .flow-step .content { padding-bottom: 32px; }
+  .flow-step:last-child .content { padding-bottom: 0; }
+  .flow-step h3 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+  .flow-step p { font-size: 0.88rem; color: var(--text-dim); }
+
+  /* animated loop indicator */
+  .loop-vis {
+    margin-top: 48px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 32px; max-width: 640px; margin-left: auto; margin-right: auto;
+  }
+  .loop-vis h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 20px; color: var(--text-dim); text-align: center; }
+  .loop-ring {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    flex-wrap: wrap;
+  }
+  .loop-node {
+    padding: 10px 18px; border-radius: 8px; font-size: 0.82rem; font-weight: 600;
+    background: var(--surface-2); border: 1px solid var(--border);
+    transition: all 0.4s; white-space: nowrap;
+  }
+  .loop-node.glow {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow);
+    color: #fff;
+  }
+  .loop-arrow {
+    color: var(--text-dim); font-size: 1rem;
+    animation: pulse-arrow 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  /* ---- AGENT FOLDER ---- */
+  .folder-layout {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 768px) { .folder-layout { grid-template-columns: 1fr; } }
+  .file-tree {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; font-family: var(--mono); font-size: 0.85rem;
+    line-height: 1.9;
+  }
+  .file-tree .dir { color: var(--cyan); font-weight: 600; }
+  .file-tree .file { color: var(--text-dim); }
+  .file-tree .file::before { content: ''; display: inline-block; width: 16px; }
+  .file-tree .comment { color: var(--text-dim); opacity: 0.5; font-style: italic; }
+  .folder-explain { padding-top: 8px; }
+  .folder-explain h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
+  .folder-explain ul { list-style: none; }
+  .folder-explain li {
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.92rem;
+    color: var(--text-dim);
+  }
+  .folder-explain li:last-child { border-bottom: none; }
+  .folder-explain li strong { color: var(--text); font-family: var(--mono); font-weight: 600; }
+
+  /* ---- CONFIG ---- */
+  .code-block {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .code-header {
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; font-weight: 600; color: var(--text-dim);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .code-header .lang { color: var(--accent); }
+  pre {
+    padding: 20px; overflow-x: auto; font-family: var(--mono);
+    font-size: 0.82rem; line-height: 1.7;
+  }
+  .json-key { color: var(--cyan); }
+  .json-string { color: var(--green); }
+  .json-number { color: var(--orange); }
+  .json-null { color: var(--text-dim); }
+
+  /* ---- TOOLS TABLE ---- */
+  .tools-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px;
+  }
+  .tool-chip {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px;
+  }
+  .tool-chip code {
+    font-family: var(--mono); font-size: 0.82rem; font-weight: 600; color: var(--accent);
+  }
+  .tool-chip span { font-size: 0.82rem; color: var(--text-dim); }
+
+  /* ---- CLI ---- */
+  .cli-table { width: 100%; border-collapse: collapse; }
+  .cli-table th, .cli-table td {
+    text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+  .cli-table th { color: var(--text-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .cli-table code { font-family: var(--mono); color: var(--accent); font-size: 0.82rem; }
+  .cli-table .default { color: var(--text-dim); font-family: var(--mono); font-size: 0.82rem; }
+
+  /* ---- OUTPUT ---- */
+  .output-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
+  }
+  .output-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+  }
+  .output-card code {
+    display: block; font-family: var(--mono); font-size: 0.88rem;
+    font-weight: 600; color: var(--accent); margin-bottom: 8px;
+  }
+  .output-card p { font-size: 0.88rem; color: var(--text-dim); }
+
+  /* ---- FOOTER ---- */
+  footer {
+    text-align: center; padding: 48px 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: 0.85rem;
+  }
+
+  /* ---- MOBILE ---- */
+  @media (max-width: 640px) {
+    nav .links { gap: 16px; }
+    nav .links a { font-size: 0.8rem; }
+    section { padding: 64px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="inner">
+    <div class="logo"><span>&gt;_</span> agent-runner</div>
+    <div class="links">
+      <a href="#hero">Home</a>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#agent-folder">Agent Folder</a>
+      <a href="#configuration">Config</a>
+      <a href="#cli">CLI</a>
+      <a href="#tools">Tools</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div>
+    <div class="badge">Rust &middot; MIT License</div>
+    <h1>Agent = agent-runner<br>+ folder with<br><span class="accent">AGENTS.md &amp; skills</span></h1>
+    <p class="tagline">
+      A minimal, non-interactive AI agent runner in your server or container.
+      Give it a folder with AGENTS.md and skills, it will uses tools, MCP and skills
+      and iterates until the task is done.
+    </p>
+    <div class="cta-row">
+      <a href="#agent-folder" class="btn btn-primary">Get Started &darr;</a>
+      <a href="https://github.com/anomalyco/agent-runner" class="btn btn-secondary" target="_blank">GitHub &nearr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="inner">
+    <div class="section-label">Features</div>
+    <div class="section-title">Everything you need, nothing you don't</div>
+    <div class="section-desc">
+      agent-runner is a single binary that turns an LLM into an autonomous worker.
+      No servers, no databases, no setup beyond one folder.
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f9e0;</div>
+        <h3>Multi-Provider LLM</h3>
+        <p>Anthropic and OpenAI-compatible APIs. Swap models with one line in config.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4cb;</div>
+        <h3>Planning Phase</h3>
+        <p>Generates a step-by-step execution plan before acting. Preview with --plan-only.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f504;</div>
+        <h3>Autonomous Loop</h3>
+        <p>LLM call &rarr; tool use &rarr; repeat. Runs until task_done or max iterations.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x2702;&#xfe0f;</div>
+        <h3>Conversation Summarization</h3>
+        <p>Automatically compacts long conversations to stay within context limits.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f5c4;&#xfe0f;</div>
+        <h3>Filesystem Tools</h3>
+        <p>ls, read, write, edit, glob, grep &mdash; everything an agent needs to work with code.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f6e1;&#xfe0f;</div>
+        <h3>Permission System</h3>
+        <p>Allow/deny rules for read/write on specific paths. Sandboxed by default.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f527;</div>
+        <h3>MCP Servers</h3>
+        <p>Connect external tools via the Model Context Protocol (JSON-RPC).</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4dd;</div>
+        <h3>Skills</h3>
+        <p>Load custom instructions, references, and executable scripts per agent.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4ca;</div>
+        <h3>Full Tracing</h3>
+        <p>JSONL trace of every iteration, tool call, and LLM response. Complete audit trail.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="inner">
+    <div class="section-label">How It Works</div>
+    <div class="section-title">From prompt to result, autonomously</div>
+    <div class="section-desc">
+      The agent loads your configuration, plans the task, then runs an autonomous
+      loop until it finishes or hits a limit.
+    </div>
+
+    <div class="flow-container">
+      <div class="flow-step">
+        <div class="line-col"><div class="dot cyan"></div><div class="stem"></div></div>
+        <div class="content">
+          <h3>1. Load Agent Folder</h3>
+          <p>Reads AGENTS.md (system prompt), agent-runner.json (MCP config), .env (LLM settings), and skills.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="line-col"><div class="dot orange"></div><div class="stem"></div></div>
+        <div class="content">
+          <h3>2. Generate Plan</h3>
+          <p>Optionally generates a step-by-step execution plan and saves it to plan.md.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="line-col"><div class="dot active"></div><div class="stem"></div></div>
+        <div class="content">
+          <h3>3. Agent Loop</h3>
+          <p>LLM call &rarr; tool execution &rarr; repeat. Summarizes if context gets too long.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="line-col"><div class="dot green"></div></div>
+        <div class="content">
+          <h3>4. Write Output</h3>
+          <p>Report, transcript, and trace log written to the output directory.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="loop-vis" id="loopVis">
+      <h4>Agent Loop Animation</h4>
+      <div class="loop-ring">
+        <div class="loop-node" id="n1">LLM Call</div>
+        <div class="loop-arrow">&rarr;</div>
+        <div class="loop-node" id="n2">Tool Calls</div>
+        <div class="loop-arrow">&rarr;</div>
+        <div class="loop-node" id="n3">Summarize</div>
+        <div class="loop-arrow">&rarr;</div>
+        <div class="loop-node" id="n4">Check Done</div>
+        <div class="loop-arrow">&rarr;</div>
+        <div class="loop-node" id="n5">Next Iteration</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AGENT FOLDER -->
+<section id="agent-folder">
+  <div class="inner">
+    <div class="section-label">Agent Folder</div>
+    <div class="section-title">Agent = agent-runner + Folder</div>
+    <div class="section-desc">
+      No database, no server, no extra setup. Drop an AGENTS.md, an agent-runner.json,
+      and optionally a skills/ directory.
+    </div>
+    <div class="folder-layout">
+      <div class="file-tree">
+        <span class="dir">my-agent/</span><br>
+        <span class="file">├── AGENTS.md</span> <span class="comment"># system prompt</span><br>
+        <span class="file">├── agent-runner.json</span> <span class="comment"># MCP config</span><br>
+        <span class="dir">└── skills/</span><br>
+        <span class="file">&nbsp;&nbsp;&nbsp;└── search/</span><br>
+        <span class="file">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── SKILL.md</span> <span class="comment"># instructions</span><br>
+        <span class="file">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── references/</span> <span class="comment"># docs</span><br>
+        <span class="file">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── scripts/</span> <span class="comment"># executables</span>
+      </div>
+      <div class="folder-explain">
+        <h3>What goes where</h3>
+        <ul>
+          <li><strong>AGENTS.md</strong> &mdash; The system prompt. Defines who the agent is and how it behaves. Standard Markdown.</li>
+          <li><strong>agent-runner.json</strong> &mdash; MCP servers configuration only. LLM settings come from environment variables.</li>
+          <li><strong>skills/*/SKILL.md</strong> &mdash; Skill instructions injected into the system prompt at load time.</li>
+          <li><strong>skills/*/references/</strong> &mdash; Reference documents the agent can use.</li>
+          <li><strong>skills/*/scripts/</strong> &mdash; Executable scripts exposed as agent tools.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONFIGURATION -->
+<section id="configuration">
+  <div class="inner">
+    <div class="section-label">Configuration</div>
+    <div class="section-title">agent-runner.json</div>
+    <div class="section-desc">
+      Only MCP server configuration. LLM settings come from environment variables or <code>.env</code>.
+    </div>
+    <div class="code-block">
+      <div class="code-header">
+        <span>agent-runner.json</span>
+        <span class="lang">JSON</span>
+      </div>
+      <pre><span class="json-key">{</span>
+  <span class="json-key">"mcp_servers"</span>: <span class="json-key">{}</span>
+<span class="json-key">}</span></pre>
+    </div>
+
+    <div style="margin-top:48px">
+      <div class="section-title" style="font-size:1.3rem;">Environment Variables</div>
+      <div class="section-desc">
+        Set LLM provider, model, base URL, and API key via environment variables or a <code>.env</code> file.
+      </div>
+      <div style="overflow-x:auto; margin-bottom:24px;">
+        <table class="cli-table">
+          <thead>
+            <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>LLM_PROVIDER</code></td><td class="default">yes</td><td><code>anthropic</code> or <code>openai</code></td></tr>
+            <tr><td><code>LLM_MODEL</code></td><td class="default">yes</td><td>Model name (e.g. <code>claude-sonnet-4-20250514</code>, <code>gpt-4o</code>)</td></tr>
+            <tr><td><code>LLM_BASE_URL</code></td><td class="default">no</td><td>Override base URL for OpenAI-compatible APIs</td></tr>
+            <tr><td><code>LLM_API_KEY</code></td><td class="default">yes</td><td>API key (or use provider-specific name)</td></tr>
+            <tr><td><code>ANTHROPIC_API_KEY</code></td><td class="default">if provider=anthropic</td><td>Anthropic API key</td></tr>
+            <tr><td><code>OPENAI_API_KEY</code></td><td class="default">if provider=openai</td><td>OpenAI API key</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span>.env</span></div>
+        <pre><span class="json-string">LLM_PROVIDER</span>=<span style="color:var(--text-dim)">anthropic</span>
+<span class="json-string">LLM_MODEL</span>=<span style="color:var(--text-dim)">claude-sonnet-4-20250514</span>
+<span class="json-string">LLM_BASE_URL</span>=<span style="color:var(--text-dim)">https://api.anthropic.com</span>
+<span class="json-string">ANTHROPIC_API_KEY</span>=<span style="color:var(--text-dim)">sk-ant-...</span></pre>
+      </div>
+    </div>
+
+    <div style="margin-top:48px">
+      <div class="section-title" style="font-size:1.3rem;">MCP Servers</div>
+      <div class="section-desc">Connect external tools via the Model Context Protocol.</div>
+      <div class="code-block">
+        <div class="code-header"><span>agent-runner.json &mdash; mcp_servers</span><span class="lang">JSON</span></div>
+        <pre><span class="json-key">{</span>
+  <span class="json-key">"mcp_servers"</span>: <span class="json-key">{</span>
+    <span class="json-key">"filesystem"</span>: <span class="json-key">{</span>
+      <span class="json-key">"command"</span>: <span class="json-string">"npx"</span>,
+      <span class="json-key">"args"</span>: <span class="json-key">[</span><span class="json-string">"-y"</span>, <span class="json-string">"@modelcontextprotocol/server-filesystem"</span>, <span class="json-string">"/data"</span><span class="json-key">]</span>,
+      <span class="json-key">"env"</span>: <span class="json-key">{}</span>
+    <span class="json-key">}</span>
+  <span class="json-key">}</span>
+<span class="json-key">}</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLI -->
+<section id="cli">
+  <div class="inner">
+    <div class="section-label">CLI</div>
+    <div class="section-title">Command Line</div>
+
+    <div class="code-block" style="margin-bottom:32px;">
+      <div class="code-header"><span>Quick start</span><span class="lang">Shell</span></div>
+      <pre><span class="json-string">cd</span> agent-runner
+cargo build --release
+<span class="json-string">cp</span> .env.example .env   <span style="color:var(--text-dim)"># edit with your API key</span>
+./target/release/agent-runner <span class="json-string">--agent-dir</span> ./my-agent <span class="json-string">--prompt</span> <span style="color:var(--green)">"Fix the failing tests"</span></pre>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="cli-table">
+        <thead>
+          <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>--agent-dir</code></td><td class="default">required</td><td>Path to agent folder</td></tr>
+          <tr><td><code>--prompt</code></td><td class="default">required</td><td>Task prompt or path to a text file</td></tr>
+          <tr><td><code>--plan-only</code></td><td class="default">false</td><td>Generate plan and exit</td></tr>
+          <tr><td><code>--max-iterations</code></td><td class="default">50</td><td>Max agent loop iterations</td></tr>
+          <tr><td><code>--output-dir</code></td><td class="default">./agent-output</td><td>Output directory</td></tr>
+          <tr><td><code>--working-dir</code></td><td class="default">.</td><td>Working directory for tools</td></tr>
+          <tr><td><code>--tool-timeout</code></td><td class="default">120</td><td>Timeout per tool call (seconds)</td></tr>
+          <tr><td><code>--run-limit</code></td><td class="default">3600</td><td>Maximum total run time (seconds)</td></tr>
+          <tr><td><code>--mail-to</code></td><td class="default">none</td><td>Email for result notification</td></tr>
+          <tr><td><code>--verbose</code></td><td class="default">false</td><td>Print iteration details</td></tr>
+          <tr><td><code>--sandbox</code></td><td class="default">false</td><td>Enable shell execution</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:32px; overflow-x:auto;">
+      <table class="cli-table">
+        <thead>
+          <tr><th>Exit Code</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>0</code></td><td>Task completed</td></tr>
+          <tr><td><code>1</code></td><td>Task failed</td></tr>
+          <tr><td><code>2</code></td><td>Max iterations or run limit exceeded</td></tr>
+          <tr><td><code>3</code></td><td>Configuration error</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- TOOLS -->
+<section id="tools">
+  <div class="inner">
+    <div class="section-label">Tools</div>
+    <div class="section-title">Built-in Tools</div>
+    <div class="section-desc">
+      The agent has a full set of filesystem and control tools available by default.
+    </div>
+    <div class="tools-grid">
+      <div class="tool-chip"><code>ls</code><span>list directory</span></div>
+      <div class="tool-chip"><code>read_file</code><span>read with pagination</span></div>
+      <div class="tool-chip"><code>write_file</code><span>write content</span></div>
+      <div class="tool-chip"><code>edit_file</code><span>find &amp; replace</span></div>
+      <div class="tool-chip"><code>glob</code><span>find files by pattern</span></div>
+      <div class="tool-chip"><code>grep</code><span>search with regex</span></div>
+      <div class="tool-chip"><code>execute</code><span>run shell commands</span></div>
+      <div class="tool-chip"><code>task_done</code><span>signal completion</span></div>
+      <div class="tool-chip"><code>write_todos</code><span>track task list</span></div>
+      <div class="tool-chip"><code>compact</code><span>shrink context</span></div>
+    </div>
+
+    <div style="margin-top:48px;">
+      <div class="section-title" style="font-size:1.3rem;">Output Files</div>
+      <div class="output-grid">
+        <div class="output-card"><code>run.json</code><p>Detailed run log with per-tool TAT, errors, and exceptions</p></div>
+        <div class="output-card"><code>plan.md</code><p>Generated execution plan</p></div>
+        <div class="output-card"><code>report.json</code><p>Status, token usage, iterations, duration, todos</p></div>
+        <div class="output-card"><code>transcript.json</code><p>Full message history</p></div>
+        <div class="output-card"><code>trace.jsonl</code><p>Structured event log, one JSON object per line</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>agent-runner &mdash; MIT License &mdash; Built with Rust</p>
+</footer>
+
+<script>
+  // Animated loop visualization
+  const nodes = ['n1','n2','n3','n4','n5'];
+  let idx = 0;
+  setInterval(() => {
+    nodes.forEach(id => document.getElementById(id).classList.remove('glow'));
+    document.getElementById(nodes[idx]).classList.add('glow');
+    idx = (idx + 1) % nodes.length;
+  }, 1200);
+</script>
+</body>
+</html>

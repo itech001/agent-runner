@@ -1,3 +1,4 @@
+use dotenvy::dotenv;
 use agent::planner::Planner;
 use agent_dir::AgentDir;
 use clap::Parser;
@@ -6,6 +7,7 @@ use provider::anthropic::AnthropicProvider;
 use provider::openai::OpenAiProvider;
 use provider::Provider;
 use report::{Metrics, Report, TokenMetrics};
+use run_log::RunLogger;
 use std::path::PathBuf;
 use std::sync::Arc;
 use summarization::Summarizer;
@@ -22,6 +24,7 @@ pub mod output;
 pub mod permissions;
 pub mod provider;
 pub mod report;
+pub mod run_log;
 pub mod skills;
 pub mod summarization;
 pub mod tools;
@@ -56,10 +59,18 @@ pub struct Cli {
 
     #[arg(long, default_value_t = false)]
     pub sandbox: bool,
+
+    #[arg(long, default_value_t = 120, value_name = "SECONDS")]
+    pub tool_timeout: u64,
+
+    #[arg(long, default_value_t = 3600, value_name = "SECONDS")]
+    pub run_limit: u64,
 }
 
 #[tokio::main]
 async fn main() {
+    let _ = dotenv();
+
     let cli = Cli::parse();
 
     let agent_dir = match AgentDir::load(&cli.agent_dir) {
@@ -70,27 +81,27 @@ async fn main() {
         }
     };
 
-    let api_key = match agent_dir.config.get_api_key() {
-        Ok(k) => k,
+    let llm = match config::Config::load_llm() {
+        Ok(l) => l,
         Err(e) => {
-            eprintln!("Config error: {}", e);
+            eprintln!("LLM config error: {}", e);
             std::process::exit(3);
         }
     };
 
-    let provider: Arc<dyn Provider> = match agent_dir.config.llm.provider.as_str() {
+    let provider: Arc<dyn Provider> = match llm.provider.as_str() {
         "anthropic" => Arc::new(AnthropicProvider::new(
-            api_key,
-            agent_dir.config.llm.model.clone(),
-            agent_dir.config.llm.max_tokens,
-            agent_dir.config.llm.temperature,
+            llm.api_key,
+            llm.model.clone(),
+            llm.max_tokens,
+            llm.temperature,
         )),
         _ => Arc::new(OpenAiProvider::new(
-            api_key,
-            agent_dir.config.llm.model.clone(),
-            agent_dir.config.llm.base_url.clone(),
-            agent_dir.config.llm.max_tokens,
-            agent_dir.config.llm.temperature,
+            llm.api_key,
+            llm.model.clone(),
+            llm.base_url.clone(),
+            llm.max_tokens,
+            llm.temperature,
         )),
     };
 
@@ -129,7 +140,7 @@ async fn main() {
     let skill_names: Vec<String> = agent_dir.skills.iter().map(|s| s.name.clone()).collect();
     trace.log_init(
         &cli.agent_dir.to_string_lossy(),
-        &agent_dir.config.llm.model,
+        &llm.model,
         &tool_names,
         &skill_names,
     );
@@ -139,6 +150,8 @@ async fn main() {
     } else {
         cli.prompt.clone()
     };
+
+    let run_logger = Arc::new(RunLogger::new(&prompt_text, &cli.output_dir));
 
     let mut system_prompt = agent_dir.system_prompt.clone();
     if !agent_dir.skills.is_empty() {
@@ -154,9 +167,15 @@ async fn main() {
         let plan = planner
             .generate_plan(&system_prompt, &prompt_text, &all_tool_names)
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                run_logger.add_error(0, "planning", &e);
+                String::new()
+            });
         Planner::save_plan(&plan, &cli.output_dir)
-            .unwrap_or_else(|e| eprintln!("Warning: {}", e));
+            .unwrap_or_else(|e| {
+                run_logger.add_error(0, "planning", &format!("Failed to save plan: {}", e));
+                eprintln!("Warning: {}", e)
+            });
         plan
     } else {
         String::new()
@@ -182,17 +201,24 @@ async fn main() {
         trace.clone(),
     );
 
+    let loop_config = agent::r#loop::LoopConfig {
+        max_iterations: cli.max_iterations,
+        tool_timeout_secs: cli.tool_timeout,
+        run_limit_secs: cli.run_limit,
+        verbose: cli.verbose,
+    };
+
     let result = agent::r#loop::run_loop(
         provider,
         tools,
         &mut messages,
-        cli.max_iterations,
+        loop_config,
         &mut summarizer,
         evaluator,
         trace.clone(),
         compact_tool.clone(),
         todos_tool.clone(),
-        cli.verbose,
+        run_logger.clone(),
     )
     .await;
 
@@ -226,10 +252,18 @@ async fn main() {
         cli.mail_to.as_deref(),
     ) {
         eprintln!("Output error: {}", e);
+        run_logger.add_error(result.total_iterations, "output", &format!("Output error: {}", e));
     }
 
     report::write_transcript(&messages, &cli.output_dir)
-        .unwrap_or_else(|e| eprintln!("Transcript error: {}", e));
+        .unwrap_or_else(|e| {
+            eprintln!("Transcript error: {}", e);
+            run_logger.add_error(result.total_iterations, "transcript", &format!("Transcript error: {}", e));
+        });
+
+    if let Err(e) = run_logger.write_to_file() {
+        eprintln!("Failed to write run.json: {}", e);
+    }
 
     std::process::exit(result.exit_code as i32);
 }

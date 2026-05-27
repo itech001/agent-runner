@@ -24,7 +24,7 @@ impl AgentDir {
             "You are a helpful assistant.".to_string()
         };
 
-        let config_path = dir.join("config.json");
+        let config_path = dir.join("agent-runner.json");
         let config =
             Config::load(&config_path).map_err(|e| format!("Failed to load config: {}", e))?;
 
