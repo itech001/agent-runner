@@ -208,6 +208,24 @@ async fn main() {
         verbose: cli.verbose,
     };
 
+    let tool_timeout_secs = if cli.tool_timeout != 120 {
+        cli.tool_timeout
+    } else {
+        agent_dir.config.timeouts.tool_timeout_secs
+    };
+    let run_limit_secs = if cli.run_limit != 3600 {
+        cli.run_limit
+    } else {
+        agent_dir.config.timeouts.run_limit_secs
+    };
+
+    let loop_config = agent::r#loop::LoopConfig {
+        max_iterations: cli.max_iterations,
+        tool_timeout_secs,
+        run_limit_secs,
+        verbose: cli.verbose,
+    };
+
     let result = agent::r#loop::run_loop(
         provider,
         tools,

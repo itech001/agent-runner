@@ -13,6 +13,8 @@ pub struct Config {
     pub subagents: Vec<SubAgentConfig>,
     #[serde(default)]
     pub agent: AgentConfig,
+    #[serde(default)]
+    pub timeouts: TimeoutConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +126,30 @@ impl Default for AgentConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct TimeoutConfig {
+    #[serde(default = "default_tool_timeout")]
+    pub tool_timeout_secs: u64,
+    #[serde(default = "default_run_limit")]
+    pub run_limit_secs: u64,
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            tool_timeout_secs: 120,
+            run_limit_secs: 3600,
+        }
+    }
+}
+
+fn default_tool_timeout() -> u64 {
+    120
+}
+fn default_run_limit() -> u64 {
+    3600
+}
+
 fn default_max_iterations() -> u32 {
     50
 }
@@ -196,6 +222,7 @@ impl Default for Config {
             permissions: Vec::new(),
             subagents: Vec::new(),
             agent: AgentConfig::default(),
+            timeouts: TimeoutConfig::default(),
         }
     }
 }
