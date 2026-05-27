@@ -8,19 +8,19 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0D0D0D;
-    --surface: #141418;
-    --surface-2: #1C1C22;
-    --border: #2A2A35;
-    --text: #F0F0F5;
-    --text-dim: #7A7A90;
+    --bg: #F5F5F7;
+    --surface: #FFFFFF;
+    --surface-2: #F0F0F5;
+    --border: #E0E0E8;
+    --text: #1A1A1F;
+    --text-dim: #6B6B80;
     --accent: #7C6AEF;
-    --accent-glow: rgba(124, 106, 239, 0.25);
-    --green: #22C55E;
-    --green-dim: rgba(34, 197, 94, 0.12);
+    --accent-glow: rgba(124, 106, 239, 0.15);
+    --green: #16A34A;
+    --green-dim: rgba(22, 163, 74, 0.1);
     --orange: #FB923C;
-    --cyan: #22D3EE;
-    --red: #F87171;
+    --cyan: #0891B2;
+    --red: #DC2626;
     --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
   }
@@ -30,8 +30,8 @@
 
   body {
     font-family: var(--font);
-    background: linear-gradient(135deg, #0D0D0D 0%, #1A1A2E 50%, #16213E 100%);
-    color: var(--text);
+    background: linear-gradient(135deg, #F5F5F7 0%, #E8E8ED 50%, #DCDCDF 100%);
+    color: #1A1A1F;
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
@@ -339,18 +339,6 @@
     <div class="cta-row">
       <a href="#agent-folder" class="btn btn-primary">Get Started &darr;</a>
       <a href="https://github.com/itech001/agent-runner" class="btn btn-secondary" target="_blank">GitHub &nearr;</a>
-    </div>
-  </div>
-</section>
-
-<!-- ARCHITECTURE DIAGRAM -->
-<section id="architecture">
-  <div class="inner" style="text-align:center;">
-    <div class="section-label">Architecture</div>
-    <div class="section-title">System Overview</div>
-    <p class="section-desc" style="margin:0 auto 32px;">A visual guide to how agent-runner works — from folder structure to autonomous execution loop.</p>
-    <div style="max-width:1200px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid var(--border);">
-      <img src="agent-runner-architecture.png" alt="agent-runner architecture diagram" style="width:100%;display:block;">
     </div>
   </div>
 </section>
