@@ -271,20 +271,6 @@
   .cli-table code { font-family: var(--mono); color: var(--accent); font-size: 0.82rem; }
   .cli-table .default { color: var(--text-dim); font-family: var(--mono); font-size: 0.82rem; }
 
-  /* ---- OUTPUT ---- */
-  .output-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
-  }
-  .output-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 22px;
-  }
-  .output-card code {
-    display: block; font-family: var(--mono); font-size: 0.88rem;
-    font-weight: 600; color: var(--accent); margin-bottom: 8px;
-  }
-  .output-card p { font-size: 0.88rem; color: var(--text-dim); }
-
   /* ---- FOOTER ---- */
   footer {
     text-align: center; padding: 48px 24px;
@@ -322,7 +308,7 @@
 <section id="hero">
   <div>
     <div class="badge">Rust &middot; MIT License</div>
-    <h1>Agent = agent-runner<br>+ folder with<br><span class="accent">AGENTS.md &amp; skills</span></h1>
+    <h1>agent-runner</h1>
     <p class="tagline">
       A minimal, non-interactive AI agent runner in your server or container.
       Give it a folder with AGENTS.md and skills, it will uses tools, MCP and skills
@@ -330,7 +316,7 @@
     </p>
     <div class="cta-row">
       <a href="#agent-folder" class="btn btn-primary">Get Started &darr;</a>
-      <a href="https://github.com/anomalyco/agent-runner" class="btn btn-secondary" target="_blank">GitHub &nearr;</a>
+      <a href="https://github.com/itech001/agent-runner" class="btn btn-secondary" target="_blank">GitHub &nearr;</a>
     </div>
   </div>
 </section>
@@ -622,17 +608,6 @@ cargo build --release
       <div class="tool-chip"><code>task_done</code><span>signal completion</span></div>
       <div class="tool-chip"><code>write_todos</code><span>track task list</span></div>
       <div class="tool-chip"><code>compact</code><span>shrink context</span></div>
-    </div>
-
-    <div style="margin-top:48px;">
-      <div class="section-title" style="font-size:1.3rem;">Output Files</div>
-      <div class="output-grid">
-        <div class="output-card"><code>run.json</code><p>Detailed run log with per-tool TAT, errors, and exceptions</p></div>
-        <div class="output-card"><code>plan.md</code><p>Generated execution plan</p></div>
-        <div class="output-card"><code>report.json</code><p>Status, token usage, iterations, duration, todos</p></div>
-        <div class="output-card"><code>transcript.json</code><p>Full message history</p></div>
-        <div class="output-card"><code>trace.jsonl</code><p>Structured event log, one JSON object per line</p></div>
-      </div>
     </div>
   </div>
 </section>
