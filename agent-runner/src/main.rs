@@ -14,6 +14,7 @@ use summarization::Summarizer;
 use tools::compact::CompactTool;
 use tools::done::TaskDoneTool;
 use tools::filesystem::create_filesystem_tools;
+use tools::plan::{ReadPlanTool, UpdatePlanTool};
 use tools::todos::TodosTool;
 
 pub mod agent;
@@ -59,6 +60,9 @@ pub struct Cli {
 
     #[arg(long, default_value_t = false)]
     pub sandbox: bool,
+
+    #[arg(long, value_delimiter = ',')]
+    pub writable_paths: Option<Vec<String>>,
 
     #[arg(long, default_value_t = 120, value_name = "SECONDS")]
     pub tool_timeout: u64,
@@ -113,7 +117,15 @@ async fn main() {
         }
     });
 
-    let evaluator = PermissionEvaluator::new(agent_dir.config.permissions.clone());
+    let mut writable_paths = agent_dir.config.writable_paths.clone();
+    if let Some(cli_wp) = &cli.writable_paths {
+        writable_paths.extend(cli_wp.iter().cloned());
+    }
+    let evaluator = PermissionEvaluator::new(
+        agent_dir.config.permissions.clone(),
+        writable_paths,
+        cli.working_dir.clone(),
+    );
     let compact_tool = Arc::new(CompactTool::new());
     let todos_tool = Arc::new(TodosTool::new());
 
@@ -130,6 +142,10 @@ async fn main() {
 
     tools.push(Box::new(TaskDoneTool));
     tools.push(Box::new(tools::compact::CompactTool::new()));
+
+    let plan_path = cli.output_dir.join("plan.json");
+    tools.push(Box::new(ReadPlanTool::new(plan_path.clone())));
+    tools.push(Box::new(UpdatePlanTool::new(plan_path.clone())));
 
     let skill_tools = tools::skill_tool::from_skills(&agent_dir.skills);
     tools.extend(skill_tools);
@@ -161,36 +177,40 @@ async fn main() {
         }
     }
 
-    let plan = if agent_dir.config.agent.plan_required {
+    let plan_text = if agent_dir.config.agent.plan_required {
         let planner = Planner::new(provider.clone(), trace.clone());
         let all_tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
-        let plan = planner
+        let raw_plan = planner
             .generate_plan(&system_prompt, &prompt_text, &all_tool_names)
             .await
             .unwrap_or_else(|e| {
                 run_logger.add_error(0, "planning", &e);
                 String::new()
             });
-        Planner::save_plan(&plan, &cli.output_dir)
+        let plan = Planner::parse_plan(&raw_plan, &prompt_text);
+        Planner::save_plan_json(&plan, &cli.output_dir)
             .unwrap_or_else(|e| {
                 run_logger.add_error(0, "planning", &format!("Failed to save plan: {}", e));
                 eprintln!("Warning: {}", e)
             });
-        plan
+        raw_plan
     } else {
         String::new()
     };
 
     if cli.plan_only {
-        println!("{}", plan);
+        match std::fs::read_to_string(cli.output_dir.join("plan.json")) {
+            Ok(content) => println!("{}", content),
+            Err(_) => println!("{}", plan_text),
+        }
         std::process::exit(0);
     }
 
     let mut messages = vec![provider::Message::system(system_prompt)];
-    if !plan.is_empty() {
+    if !plan_text.is_empty() {
         messages.push(provider::Message::system(format!(
-            "[Execution Plan]\n{}",
-            plan
+            "[Execution Plan]\n{}\n\nUse the read_plan tool to review the plan and its step statuses, and update_plan to mark steps as in_progress, done, or skipped as you progress.",
+            plan_text
         )));
     }
     messages.push(provider::Message::user(prompt_text.clone()));
@@ -246,7 +266,7 @@ async fn main() {
         result.status.clone(),
         result.exit_code,
         prompt_text.clone(),
-        cli.output_dir.join("plan.md").to_string_lossy().into_owned(),
+        cli.output_dir.join("plan.json").to_string_lossy().into_owned(),
         todos_final,
         0,
         Metrics {

@@ -58,11 +58,12 @@ MCP servers, timeouts, permissions, and agent behavior. LLM settings come from e
     "plan_required": true,
     "execute_enabled": false
   },
-  "permissions": [
-    { "operations": ["read"], "paths": ["./*"], "mode": "allow" }
-  ]
+  "writable_paths": ["./src/*", "/tmp/out/*"],
+  "permissions": []
 }
 ```
+
+By default all paths are **read-only**. Only paths listed in `writable_paths` can be written to (by `write_file`, `edit_file`, `execute`). Patterns use glob syntax (`**`, `*`, `?`). The `permissions` array is kept for advanced allow/deny rules and is checked as a fallback when `writable_paths` does not match.
 
 ### Timeout Settings
 
@@ -137,9 +138,10 @@ API keys can be provided via:
     "keep_tokens": 20000,
     "trim_tokens": 4000
   },
+  "writable_paths": ["./src/*"],
   "permissions": [
     {
-      "operations": ["read"],
+      "operations": ["write"],
       "paths": ["./*"],
       "mode": "allow"
     }
@@ -158,10 +160,11 @@ agent-runner --agent-dir <DIR> --prompt <TEXT|FILE> [OPTIONS]
 |--------|---------|-------------|
 | `--agent-dir` | (required) | Path to agent folder |
 | `--prompt` | (required) | Task prompt or path to a text file |
-| `--plan-only` | `false` | Generate plan and exit without executing |
+| `--plan-only` | `false` | Generate plan (`plan.json`) and exit without executing |
 | `--max-iterations` | `50` | Maximum agent loop iterations |
 | `--output-dir` | `./agent-output` | Output directory for reports and traces |
 | `--working-dir` | `.` | Working directory for filesystem/execute tools |
+| `--writable-paths` | (from config) | Comma-separated glob patterns of writable paths (e.g. `./src/*,/tmp/*`) |
 | `--tool-timeout` | `120` | Timeout in seconds for each tool call |
 | `--run-limit` | `3600` | Maximum total run time in seconds |
 | `--verbose` | `false` | Print iteration details to stderr |
@@ -186,28 +189,37 @@ The agent has these tools available by default:
 | `read_file` | Read file contents with line-based pagination |
 | `write_file` | Write content to a file (creates parent dirs) |
 | `edit_file` | Find-and-replace strings in a file |
-| `glob` | Find files matching a glob pattern |
-| `grep` | Search file contents with regex |
+| `glob` | Find files matching a glob pattern (respects `.gitignore`) |
+| `grep` | Search file contents with regex (respects `.gitignore`) |
 | `execute` | Run a shell command (when enabled) |
+| `read_plan` | Read the structured execution plan (`plan.json`) |
+| `update_plan` | Update a plan step's status (`pending`/`in_progress`/`done`/`skipped`) |
 | `task_done` | Signal task completion |
 | `write_todos` | Update internal todo list |
 | `compact_conversation` | Trigger conversation compaction |
 
 ### Permissions
 
-Control which tools can access which paths:
+By default **all paths are read-only** — `ls`, `read_file`, `glob`, and `grep` work everywhere. Write operations (`write_file`, `edit_file`, `execute`) are only allowed on paths matching `writable_paths`:
 
 ```json
 {
+  "writable_paths": ["./src/*", "./tests/*", "/tmp/out/*"]
+}
+```
+
+Patterns use glob syntax (`**` for recursive, `*` for single-level, `?` for one char). For advanced allow/deny rules, the legacy `permissions` array is still supported as a fallback:
+
+```json
+{
+  "writable_paths": ["./src/*"],
   "permissions": [
-    { "operations": ["read"], "paths": ["./*"], "mode": "allow" },
-    { "operations": ["write"], "paths": ["./src/*"], "mode": "allow" },
     { "operations": ["write"], "paths": ["./secrets/*"], "mode": "deny" }
   ]
 }
 ```
 
-Operations: `"read"` covers `ls`, `read_file`, `glob`, `grep`. `"write"` covers `write_file`, `edit_file`, `execute`. Paths support `/*` for prefix matching.
+`writable_paths` can also be set via the `--writable-paths` CLI flag (comma-separated); CLI values are added on top of config values.
 
 ## Output
 
@@ -216,7 +228,7 @@ After execution, the output directory contains:
 | File | Description |
 |------|-------------|
 | `run.json` | Detailed run log with per-iteration and per-tool TAT, errors, and exceptions |
-| `plan.md` | Generated execution plan |
+| `plan.json` | Structured execution plan (steps with status, readable/writable by the agent) |
 | `report.json` | Status, token usage, iterations, duration, todos |
 | `transcript.json` | Full message history |
 | `trace.jsonl` | Structured event log (one JSON object per line) |
