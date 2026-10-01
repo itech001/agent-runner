@@ -289,6 +289,19 @@
   .tag-green { background: var(--green-dim); color: var(--green); }
   .tag-dim { background: var(--surface-2); color: var(--text-dim); }
 
+  /* ---- COMPARE LISTS ---- */
+  .compare-list { list-style: none; }
+  .compare-list li {
+    padding: 8px 0 8px 22px; position: relative;
+    font-size: 0.85rem; color: var(--text-dim); line-height: 1.5;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-list li:last-child { border-bottom: none; }
+  .compare-list li::before {
+    content: ''; position: absolute; left: 4px; top: 15px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  }
+
   /* ---- FOOTER ---- */
   footer {
     text-align: center; padding: 48px 24px;
@@ -315,6 +328,7 @@
     <div class="links">
       <a href="#hero">Home</a>
       <a href="#features">Features</a>
+      <a href="#use-cases">Use Cases</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#agent-folder">Agent Folder</a>
       <a href="#configuration">Config</a>
@@ -329,11 +343,12 @@
 <section id="hero">
   <div>
     <h1>agent-runner</h1>
-    <p class="tagline-main">One Rust binary agent without any user source code</p>
+    <p class="tagline-main">Lightweight. General-purpose. Non-interactive.</p>
     <p class="tagline-detail">
-      A minimal, non-interactive AI agent runner in your server or container.
-      Give it a folder with AGENTS.md and skills, it uses tools, MCP and skills
-      and iterates until the task is done.
+      One ~3 MB Rust binary with zero runtime dependencies. Give it a folder with
+      AGENTS.md and skills, plus a prompt — it plans, uses tools, MCP servers and
+      skills, iterates autonomously until the task is done, writes its output, and exits.
+      No TUI, no chat session, no runtime to install.
     </p>
     <div class="cta-row">
       <a href="#agent-folder" class="btn btn-primary">Get Started &darr;</a>
@@ -398,6 +413,41 @@
   </div>
 </section>
 
+<!-- USE CASES -->
+<section id="use-cases">
+  <div class="inner">
+    <div class="section-label">Use Cases</div>
+    <div class="section-title">Built for unattended work</div>
+    <div class="section-desc">Anything you can describe in a prompt, you can run on a schedule, in a pipeline, or in a loop — with no human in the loop.</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <h3>Scheduled Maintenance</h3>
+        <p>Nightly jobs that update dependencies, reconcile docs against code, or check licenses. Runs unattended with a hard run limit and a non-zero exit on failure, so your scheduler can alert.</p>
+      </div>
+      <div class="feature-card">
+        <h3>CI/CD Pipelines</h3>
+        <p>An agent step that fixes lint errors, updates changelogs, or generates release notes before the pipeline gates run. Exit codes map directly onto CI semantics.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Batch Work Over Many Inputs</h3>
+        <p>Loop the binary over a directory: summarize 500 PDFs, classify 10,000 tickets, generate tests per module. Each run is isolated, so one failure doesn't poison the rest.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Custom Domain Agents</h3>
+        <p>Wrap team knowledge in a folder: an SRE agent with runbooks and a shell tool, a support agent with policy references, a data agent with warehouse MCP servers.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Guarded Server Automation</h3>
+        <p>Reads are allowed everywhere, writes only inside <code>writable_paths</code>. Run an autonomous agent on a live box with a narrow, auditable blast radius.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Embedded / Air-Gapped</h3>
+        <p>Drop the static binary into an offline environment or another team's image. No runtime install and no package registry means nothing to fetch at deploy time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- HOW IT WORKS -->
 <section id="how-it-works">
   <div class="inner">
@@ -406,9 +456,9 @@
     <div class="two-col">
       <div class="card">
         <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:18px;font-family:var(--mono);">Pipeline</h3>
-        <div class="flow-step"><div class="step-num">1</div><div><h3>Load Agent Folder</h3><p>Reads AGENTS.md, agent-runner.json, .env, and skills.</p></div></div>
-        <div class="flow-step"><div class="step-num">2</div><div><h3>Generate Plan</h3><p>Optionally generates a step-by-step execution plan.</p></div></div>
-        <div class="flow-step"><div class="step-num">3</div><div><h3>Agent Loop</h3><p>LLM call &rarr; tool execution &rarr; repeat. Summarizes if context gets long.</p></div></div>
+        <div class="flow-step"><div class="step-num">1</div><div><h3>Load Agent Folder</h3><p>Reads AGENTS.md, agent-runner.json, .env, and skills from --agent-dir only.</p></div></div>
+        <div class="flow-step"><div class="step-num">2</div><div><h3>Generate Plan</h3><p>Generates a structured plan.json the agent tracks via read_plan / update_plan.</p></div></div>
+        <div class="flow-step"><div class="step-num">3</div><div><h3>Agent Loop</h3><p>LLM call &rarr; permission check &rarr; tool execution &rarr; repeat. Summarizes if context gets long.</p></div></div>
         <div class="flow-step"><div class="step-num">4</div><div><h3>Write Output</h3><p>run.json, report, transcript, and trace log written to output directory.</p></div></div>
       </div>
       <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
@@ -591,47 +641,68 @@ cargo build --release
     </div>
 
     <div style="margin-top:64px;">
-      <div class="section-label">Benchmarks</div>
-      <div class="section-title">How it compares</div>
-      <div class="section-desc">Comparison with other agent runners on the same benchmark (SWE-bench Lite, Claude Sonnet 4). Lower is better.</div>
+      <div class="section-label">Comparison</div>
+      <div class="section-title">Built for a different moment of work</div>
+      <div class="section-desc">These tools all run an LLM agent loop. The difference is whether a human is in the loop, and whether the agent exists for a session or for a task.</div>
       <div class="bench-grid">
         <div class="bench-card highlight">
           <div class="name">agent-runner</div>
           <div class="desc">This project</div>
-          <div class="stat"><div class="stat-value" style="color:var(--green);">~3 MB</div><div class="stat-label">Binary Size</div></div>
-          <div class="stat"><div class="stat-value">$0.12</div><div class="stat-label">Avg Cost / Task</div></div>
-          <span class="tag tag-green">Zero Runtime Deps</span>
+          <div class="stat"><div class="stat-value" style="color:var(--green);">~3 MB</div><div class="stat-label">Single Rust Binary</div></div>
+          <div class="stat"><div class="stat-value">None</div><div class="stat-label">Runtime Deps</div></div>
+          <span class="tag tag-green">Non-Interactive by Design</span>
         </div>
         <div class="bench-card">
           <div class="name">Claude Code</div>
-          <div class="desc">Anthropic CLI</div>
-          <div class="stat"><div class="stat-value">~80 MB</div><div class="stat-label">Install Size</div></div>
-          <div class="stat"><div class="stat-value">$0.18</div><div class="stat-label">Avg Cost / Task</div></div>
-          <span class="tag tag-dim">Interactive Only</span>
+          <div class="desc">Anthropic &middot; developer terminal</div>
+          <div class="stat"><div class="stat-value">TUI</div><div class="stat-label">Interactive Session</div></div>
+          <div class="stat"><div class="stat-value">Node &ge; 22</div><div class="stat-label">npm Runtime</div></div>
+          <span class="tag tag-dim">Headless via -p</span>
+        </div>
+        <div class="bench-card">
+          <div class="name">Codex CLI</div>
+          <div class="desc">OpenAI &middot; developer terminal / cloud</div>
+          <div class="stat"><div class="stat-value">TUI</div><div class="stat-label">Interactive Session</div></div>
+          <div class="stat"><div class="stat-value">Rust</div><div class="stat-label">codex-rs</div></div>
+          <span class="tag tag-dim">Headless via exec</span>
         </div>
         <div class="bench-card">
           <div class="name">OpenClaw</div>
-          <div class="desc">Open source agent</div>
-          <div class="stat"><div class="stat-value">~120 MB</div><div class="stat-label">Install Size</div></div>
-          <div class="stat"><div class="stat-value">$0.22</div><div class="stat-label">Avg Cost / Task</div></div>
-          <span class="tag tag-dim">Python + Node</span>
+          <div class="desc">Always-on personal assistant</div>
+          <div class="stat"><div class="stat-value">Daemon</div><div class="stat-label">Runs Forever</div></div>
+          <div class="stat"><div class="stat-value">Node.js</div><div class="stat-label">npm (Node 24+)</div></div>
+          <span class="tag tag-dim">Chat-Driven</span>
         </div>
         <div class="bench-card">
           <div class="name">Hermes Agent</div>
-          <div class="desc">Go-based agent</div>
-          <div class="stat"><div class="stat-value">~15 MB</div><div class="stat-label">Binary Size</div></div>
-          <div class="stat"><div class="stat-value">$0.15</div><div class="stat-label">Avg Cost / Task</div></div>
-          <span class="tag tag-dim">Go Runtime</span>
-        </div>
-        <div class="bench-card">
-          <div class="name">OpenCode</div>
-          <div class="desc">Go TUI agent</div>
-          <div class="stat"><div class="stat-value">~20 MB</div><div class="stat-label">Binary Size</div></div>
-          <div class="stat"><div class="stat-value">$0.14</div><div class="stat-label">Avg Cost / Task</div></div>
-          <span class="tag tag-dim">Interactive TUI</span>
+          <div class="desc">Nous Research &middot; companion + gateway</div>
+          <div class="stat"><div class="stat-value">Daemon</div><div class="stat-label">TUI + Gateway</div></div>
+          <div class="stat"><div class="stat-value">Python</div><div class="stat-label">pip / git</div></div>
+          <span class="tag tag-dim">Grows With You</span>
         </div>
       </div>
-      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:14px;text-align:center;">Benchmarks are approximate and based on community reports. Actual performance varies by task and model.</p>
+
+      <div class="two-col" style="margin-top:28px;">
+        <div class="card">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:14px;">Right tool for agent-runner</h3>
+          <ul class="compare-list">
+            <li>Unattended execution in cron, CI, or a container</li>
+            <li>Batch work over many inputs in a loop</li>
+            <li>Shipping a domain agent as one versionable folder</li>
+            <li>Any task where no human can answer a permission prompt</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:14px;">Wrong tool for agent-runner</h3>
+          <ul class="compare-list">
+            <li>Pair-programming and exploratory work</li>
+            <li>Redirecting the agent mid-flight</li>
+            <li>Conversational memory across runs</li>
+          </ul>
+        </div>
+      </div>
+
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:18px;text-align:center;">Footprints are approximate and change frequently. Verify against each project's current release.</p>
     </div>
   </div>
 </section>

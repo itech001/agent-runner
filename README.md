@@ -1,8 +1,8 @@
 # agent-runner
 
-**One Rust binary agent without any user source code.**
+**Lightweight, general-purpose, non-interactive — one Rust binary, zero runtime dependencies, an agent defined entirely by a folder.**
 
-A minimal, non-interactive AI agent runner in your server or container. Give it a folder with AGENTS.md and skills, it uses tools, MCP and skills and iterates until the task is done.
+A minimal AI agent runner for your server or container. Give it a folder with `AGENTS.md` and skills, plus a prompt: it plans, uses tools, MCP servers, and skills, iterates autonomously until the task is done, writes its output, and exits. No TUI, no chat session, no runtime to install — you define an agent without writing any code.
 
 ![agent-runner Architecture](agent-runner-architecture.png)
 
@@ -24,6 +24,30 @@ docker build -t agent-runner .
 docker run --env-file .env agent-runner \
   --agent-dir /agents/my-agent --prompt "Fix the tests"
 ```
+
+## Why agent-runner
+
+Three properties define it, and everything else follows from them:
+
+**Lightweight.** A single ~3 MB Rust binary with zero runtime dependencies. No Node.js, no Python, no package manager, no daemon. It starts in milliseconds and you can copy it into any container — the binary *is* the whole runtime.
+
+**General-purpose.** It is not a coding assistant specifically. The agent folder is the configuration surface, so the same binary runs a code-refactoring agent, a document-processing agent, a data-migration agent, or a research-summarizing agent — each just a folder with a different `AGENTS.md`, skills, and MCP servers. You build domain agents without writing any source code.
+
+**Non-interactive.** There is no REPL and no chat window. You hand it a prompt, it plans, acts, and exits with a status code. That makes it something you can wire into cron, a CI step, a queue consumer, a webhook handler, or a Kubernetes Job — anywhere a human is not watching and cannot answer "may I?".
+
+## Use Cases
+
+**Scheduled maintenance.** Run a nightly job that updates dependencies, checks licenses, or reconciles docs against code. `agent-runner` runs unattended with `--run-limit` as a hard ceiling, and exits non-zero if it fails, so your scheduler can alert on it.
+
+**CI/CD pipelines.** Add an agent step that fixes lint errors, updates changelogs, migrates API call sites, or generates release notes — before the pipeline gates run. Exit codes (`0` completed, `1` failed, `2` limit exceeded, `3` config error) map directly onto CI semantics.
+
+**Headless batch work over many inputs.** Loop the binary over a directory of inputs: summarize 500 PDFs, classify 10,000 support tickets, translate a doc set, generate tests per module. Each invocation is isolated, so a failure on item 47 does not poison the rest, and all runs write the same structured output.
+
+**Custom domain agents.** Wrap a team's internal knowledge in an agent folder: an SRE agent with runbooks and a shell tool, a support agent with policy references, a data agent with warehouse MCP servers. The folder is versionable, reviewable, and shippable to production as one deployable unit.
+
+**Guarded automation on a server.** Because writes are denied unless a path is in `writable_paths`, you can run an autonomous agent on a live box with a narrow, auditable blast radius: it can read everything it needs to understand the system, but it can only write where you allow.
+
+**Embedded / air-gapped.** Drop the static binary into an offline environment or another team's image. No runtime install and no package registry means nothing to fetch at deploy time.
 
 ## Agent = agent-runner + Folder
 
@@ -265,25 +289,50 @@ Every run produces a `run.json` with full debugging details:
 }
 ```
 
-## Benchmarks
+## How It Compares
 
-Comparison with other agent runners (approximate, based on community reports):
+These tools all run an LLM agent loop, but they are built for different moments of work. The difference is not which is "better" — it is whether a human is in the loop, and whether the agent exists for a session or for a task.
 
-| Metric | agent-runner | Claude Code | OpenClaw | Hermes Agent | OpenCode |
-|--------|-------------|-------------|----------|-------------|----------|
-| Binary size | ~3 MB | ~80 MB | ~120 MB | ~15 MB | ~20 MB |
-| Runtime deps | Zero | Node.js | Python + Node | Go | Go |
-| Mode | Batch | Interactive | Both | Batch | Interactive |
-| Avg cost/task | $0.12 | $0.18 | $0.22 | $0.15 | $0.14 |
+| | agent-runner | Claude Code | Codex CLI | OpenClaw | Hermes Agent |
+|---|---|---|---|---|---|
+| **Interaction model** | Non-interactive, run-to-completion | Interactive TUI (plus `-p` headless mode) | Interactive TUI (plus `codex exec`) | Always-on daemon, chat-driven | Interactive TUI + gateway daemon |
+| **Runtime** | Rust, single static binary | Native binary / npm (Node ≥ 22) | Rust (`codex-rs`) | TypeScript / Node.js | Python |
+| **Lifetime** | One task, then exits | A working session | A working session | Runs forever | Runs forever |
+| **Primary lens** | Automation & pipelines | Developer at a terminal | Developer at a terminal / cloud delegation | Personal assistant | Personal/gateway assistant + research |
+| **Definition of an agent** | A folder (`AGENTS.md` + skills + MCP) | Repo context + CLAUDE.md | Repo context + AGENTS.md | Out-of-the-box assistant, configured in chat | Skills/memory that accrete over time |
+| **Sandboxing posture** | Read-only by default; writes only in `writable_paths` | Permission prompts by default | Approval modes / sandbox flags | Runs with the user's own device access | Runs on a VPS/container you provide |
+
+### The short version
+
+**agent-runner vs. Claude Code and Codex CLI.** Claude Code and Codex CLI are interactive products for a developer sitting at a terminal: you steer, they respond, and the session is the unit of work. Both do offer headless modes (`claude -p`, `codex exec`), but those are secondary entry points into an interactive tool. agent-runner inverts the priority — the batch invocation is the *only* mode. If you were going to run `claude -p` inside a cron job, you are exactly the target user; if you want a collaborator for an afternoon of refactoring, you want Claude Code or Codex instead.
+
+**agent-runner vs. OpenClaw.** OpenClaw is an always-on personal assistant: one gateway process that lives on your hardware and talks to you through WhatsApp, Telegram, Slack, and 20+ other surfaces. It is conversational, persistent, and stateful — you message it, it remembers. agent-runner has no message surface, no memory between runs, and no daemon. They are complementary rather than competing: OpenClaw answers *"assistant, handle this while I chat with you"*; agent-runner answers *"run this task now, unattended, and exit."*
+
+**agent-runner vs. Hermes Agent.** Hermes Agent (Nous Research) is a Python agent that combines an interactive TUI with a messaging gateway, cron automations, subagents, and self-improving memory. Like OpenClaw, it is built to be a long-lived companion that grows with you. agent-runner has no memory and no growth story by design: each run is a clean, reproducible task with a folder-defined identity and a deterministic exit code.
+
+**Where agent-runner is the right tool:** unattended execution on a server, in CI, or in a container; batch processing over many inputs; shipping a domain-specific agent as one versionable folder; and any workload where "no human available to answer a permission prompt" is a requirement rather than a limitation.
+
+**Where it is the wrong tool:** pair-programming, exploratory work, anything where you want to redirect the agent mid-flight, and anything requiring conversational memory across runs.
+
+### Footprint
+
+| | agent-runner | Claude Code | Codex CLI | OpenClaw | Hermes Agent |
+|---|---|---|---|---|---|
+| Install | Copy one binary | Installer / npm | npm / brew / prebuilt | npm (Node 24+) | pip / git checkout |
+| Runtime deps | None | Node.js (npm path) | None (Rust binary) | Node.js | Python |
+| Approx. binary size | ~3 MB | ~80 MB (community estimate) | ~65–100 MB archive | ~389 MB unpacked (npm) | Python package |
+| Cost model | Your API key, pay per token | Subscription or API | Subscription or API | Free (MIT), bring your own model access | Free (MIT), bring your own model access |
+
+Sizes and install footprints are approximate and change frequently — verify against each project's current release before quoting them. agent-runner's own numbers assume an optimized `cargo build --release`.
 
 ## How It Works
 
-1. Loads the agent folder (AGENTS.md, agent-runner.json, skills)
-2. Optionally generates a step-by-step execution plan
-3. Runs an autonomous loop: LLM call → tool execution → repeat
+1. Loads the agent folder (AGENTS.md, agent-runner.json, skills) — from `--agent-dir` only, never from your home directory
+2. Generates a structured execution plan (`plan.json`) when `plan_required` is true; the agent tracks progress with `read_plan` / `update_plan`
+3. Runs an autonomous loop: LLM call → permission check → tool execution → repeat
 4. Summarizes conversation history when context gets long
 5. Exits when the agent calls `task_done` or hits max iterations / run limit
-6. Writes run.json, report, transcript, and trace log
+6. Writes run.json, plan.json, report, transcript, and trace log to the output directory
 
 ## License
 
