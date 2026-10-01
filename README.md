@@ -1,5 +1,7 @@
 # agent-runner
 
+English | [中文](README-zh.md)
+
 **Lightweight, general-purpose, non-interactive — one Rust binary, zero runtime dependencies, an agent defined entirely by a folder.**
 
 A minimal AI agent runner for your server or container. Give it a folder with `AGENTS.md` and skills, plus a prompt: it plans, uses tools, MCP servers, and skills, iterates autonomously until the task is done, writes its output, and exits. No TUI, no chat session, no runtime to install — you define an agent without writing any code.
@@ -221,6 +223,24 @@ The agent has these tools available by default:
 | `task_done` | Signal task completion |
 | `write_todos` | Update internal todo list |
 | `compact_conversation` | Trigger conversation compaction |
+
+### Execution Plan
+
+When `plan_required` is `true` (the default), the agent first generates a structured execution plan saved as `plan.json`:
+
+```json
+{
+  "task": "Refactor the auth module",
+  "created_at": "2026-08-10T12:00:00Z",
+  "steps": [
+    { "id": 1, "description": "Read the auth module", "status": "done" },
+    { "id": 2, "description": "Write tests", "status": "in_progress" },
+    { "id": 3, "description": "Run tests", "status": "pending" }
+  ]
+}
+```
+
+During execution the agent reviews the plan and step statuses with `read_plan`, and marks progress with `update_plan`, so `plan.json` always reflects the latest state of the run.
 
 ### Permissions
 
