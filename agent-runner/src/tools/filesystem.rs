@@ -265,12 +265,12 @@ impl Tool for GlobTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "glob".into(),
-            description: "Find files matching a glob pattern.".into(),
+            description: "Find files matching a glob pattern. Respects .gitignore and skips hidden files by default.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "pattern": { "type": "string", "description": "Glob pattern to match" },
-                    "path": { "type": "string", "description": "Base directory to search in", "default": "/" }
+                    "pattern": { "type": "string", "description": "Glob pattern to match (e.g. **/*.rs, src/*.ts)" },
+                    "path": { "type": "string", "description": "Base directory to search in", "default": "." }
                 },
                 "required": ["pattern"]
             }),
@@ -279,34 +279,89 @@ impl Tool for GlobTool {
 
     async fn execute(&self, args: serde_json::Value) -> ToolOutput {
         let pattern = args["pattern"].as_str().unwrap_or("");
-        let base_path = args["path"].as_str().unwrap_or("/");
+        let base_path = args["path"].as_str().unwrap_or(".");
         let base = resolve_path(&self.working_dir, base_path);
 
-        let full_pattern = if pattern.starts_with('/') {
-            pattern.to_string()
-        } else {
-            base.join(pattern).to_string_lossy().into_owned()
-        };
+        if pattern.is_empty() {
+            return ToolOutput {
+                content: "Pattern must not be empty".into(),
+                is_error: true,
+            };
+        }
 
-        match glob::glob(&full_pattern) {
-            Ok(paths) => {
-                let results: Vec<String> = paths
-                    .filter_map(|p| p.ok())
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .collect();
-                ToolOutput {
-                    content: if results.is_empty() {
-                        "No matches found".into()
-                    } else {
-                        results.join("\n")
-                    },
-                    is_error: false,
+        // Compile the user pattern into a GlobSet matcher.
+        let glob = match globset::Glob::new(pattern) {
+            Ok(g) => g,
+            Err(e) => {
+                return ToolOutput {
+                    content: format!("Invalid glob pattern: {}", e),
+                    is_error: true,
                 }
             }
-            Err(e) => ToolOutput {
-                content: format!("Invalid glob pattern: {}", e),
+        };
+        let matcher = match globset::GlobSetBuilder::new().add(glob).build() {
+            Ok(gs) => gs,
+            Err(e) => {
+                return ToolOutput {
+                    content: format!("Failed to compile glob set: {}", e),
+                    is_error: true,
+                }
+            }
+        };
+
+        // If the base path is a single file, just test it directly.
+        if base.is_file() {
+            let rel = base.strip_prefix(&self.working_dir).unwrap_or(&base);
+            let matched = matcher.is_match(base.as_path())
+                || matcher.is_match(rel);
+            let content = if matched {
+                base.to_string_lossy().into_owned()
+            } else {
+                "No matches found".into()
+            };
+            return ToolOutput { content, is_error: false };
+        }
+
+        if !base.is_dir() {
+            return ToolOutput {
+                content: format!("Path not found: {}", base.display()),
                 is_error: true,
+            };
+        }
+
+        // Walk the directory tree with .gitignore / hidden-file awareness.
+        let walker = ignore::WalkBuilder::new(&base)
+            .hidden(true)
+            .git_ignore(true)
+            .git_exclude(true)
+            .git_global(true)
+            .build();
+
+        let mut results: Vec<String> = Vec::new();
+        for entry in walker.flatten() {
+            if results.len() >= 1000 {
+                results.push("... (truncated at 1000 results)".into());
+                break;
+            }
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            // Match against both the absolute path and the path relative to base.
+            let rel = path.strip_prefix(&base).unwrap_or(path);
+            if matcher.is_match(path) || matcher.is_match(rel) {
+                results.push(path.to_string_lossy().into_owned());
+            }
+        }
+
+        ToolOutput {
+            content: if results.is_empty() {
+                "No matches found".into()
+            } else {
+                results.sort();
+                results.join("\n")
             },
+            is_error: false,
         }
     }
 }
@@ -324,13 +379,13 @@ impl Tool for GrepTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "grep".into(),
-            description: "Search file contents using a regex pattern.".into(),
+            description: "Search file contents using a regex pattern. Respects .gitignore and skips hidden files by default.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "pattern": { "type": "string", "description": "Regex pattern to search for" },
-                    "path": { "type": "string", "description": "Directory or file to search in" },
-                    "glob": { "type": "string", "description": "File glob pattern to filter files" }
+                    "path": { "type": "string", "description": "Directory or file to search in", "default": "." },
+                    "glob": { "type": "string", "description": "File glob pattern to filter files (e.g. *.rs)" }
                 },
                 "required": ["pattern"]
             }),
@@ -353,17 +408,61 @@ impl Tool for GrepTool {
         };
 
         let search_path = resolve_path(&self.working_dir, path_str);
+
+        // Optional file-name glob filter.
+        let file_filter = if let Some(gp) = glob_pattern {
+            match globset::Glob::new(gp) {
+                Ok(g) => Some(g.compile_matcher()),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
         let mut results: Vec<String> = Vec::new();
+        let mut truncated = false;
 
         if search_path.is_file() {
-            search_file(&search_path, &re, &mut results);
+            search_file(&search_path, &re, &mut results, 1000);
         } else if search_path.is_dir() {
-            search_dir(&search_path, &re, glob_pattern, &mut results);
+            // Walk with .gitignore / hidden-file awareness.
+            let walker = ignore::WalkBuilder::new(&search_path)
+                .hidden(true)
+                .git_ignore(true)
+                .git_exclude(true)
+                .git_global(true)
+                .build();
+
+            for entry in walker.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                // Apply optional glob filter on the file name.
+                if let Some(ref filter) = file_filter {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if !filter.is_match(name) {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+                search_file(path, &re, &mut results, 1000);
+                if results.len() >= 1000 {
+                    truncated = true;
+                    break;
+                }
+            }
         } else {
             return ToolOutput {
                 content: format!("Path not found: {}", search_path.display()),
                 is_error: true,
             };
+        }
+
+        if truncated {
+            results.push("... (truncated at 1000 matches)".into());
         }
 
         ToolOutput {
@@ -377,41 +476,20 @@ impl Tool for GrepTool {
     }
 }
 
-fn search_file(path: &std::path::Path, re: &regex::Regex, results: &mut Vec<String>) {
+fn search_file(
+    path: &std::path::Path,
+    re: &regex::Regex,
+    results: &mut Vec<String>,
+    limit: usize,
+) {
     if let Ok(content) = std::fs::read_to_string(path) {
         for (i, line) in content.lines().enumerate() {
             if re.is_match(line) {
                 results.push(format!("{}:{}: {}", path.display(), i + 1, line));
-            }
-        }
-    }
-}
-
-fn search_dir(
-    dir: &std::path::Path,
-    re: &regex::Regex,
-    glob_pattern: Option<&str>,
-    results: &mut Vec<String>,
-) {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_dir() {
-            search_dir(&path, re, glob_pattern, results);
-        } else if let Some(gp) = glob_pattern {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if let Ok(pat) = glob::Pattern::new(gp) {
-                    if pat.matches(name) {
-                        search_file(&path, re, results);
-                    }
+                if results.len() >= limit {
+                    return;
                 }
             }
-        } else {
-            search_file(&path, re, results);
         }
     }
 }

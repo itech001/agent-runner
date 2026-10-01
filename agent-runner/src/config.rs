@@ -10,6 +10,8 @@ pub struct Config {
     #[serde(default)]
     pub permissions: Vec<FilesystemPermission>,
     #[serde(default)]
+    pub writable_paths: Vec<String>,
+    #[serde(default)]
     pub subagents: Vec<SubAgentConfig>,
     #[serde(default)]
     pub agent: AgentConfig,
@@ -220,6 +222,7 @@ impl Default for Config {
             mcp_servers: HashMap::new(),
             summarization: SummarizationConfig::default(),
             permissions: Vec::new(),
+            writable_paths: Vec::new(),
             subagents: Vec::new(),
             agent: AgentConfig::default(),
             timeouts: TimeoutConfig::default(),
